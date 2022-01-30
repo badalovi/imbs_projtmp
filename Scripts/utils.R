@@ -9,9 +9,8 @@ imbs_map <-
         expand.grid(
           over_ratio = seq(0.1,1,by=0.1),
           neighbours = 3:16,
-          gini       = 0,
           perf       = 0,
-          method     = 'smote' 
+          method     = 'smote'
         )
       )
     ),
@@ -24,9 +23,8 @@ imbs_map <-
         expand.grid(
           over_ratio    = seq(0.1,1,by=0.1),
           minority_smth = seq(0.1,1,by=0.1),
-          gini          = 0,
           perf          = 0,
-          method        = 'rose' 
+          method        = 'rose'
         )
       )
     ),
@@ -39,9 +37,8 @@ imbs_map <-
         expand.grid(
           over_ratio = seq(0.1,1,by=0.1),
           neighbours = 2:4,
-          gini       = 0,
           perf       = 0,
-          method     = 'bsmote' 
+          method     = 'bsmote'
         )
       )
     )
@@ -87,17 +84,6 @@ imbs_map_rf <- setRefClass('imbs',
                                cat('\014')
                                cat(paste0(m,': ',round(i /lngth(m,F) * 100), '% completed\n'))
                              },
-                             gini = function(data,i,method){
-                               
-                               is_bad   <- unlist(data['bad_flag'])==1
-                               preds    <- unlist(data['.pred_1'])
-                               good_sum <- sum(!is_bad)
-                               bad_sum  <- sum(is_bad)
-                               
-                               U <- sum(rank(preds)[!is_bad]) - good_sum*(good_sum+1)/2
-                               res <- (1-U/good_sum/bad_sum)*2-1
-                               map_list[[method]]$step_grid$gini[i] <<- res
-                             },
                              perf = function(data_aug,i,method,val_method){
                                
                                switch(val_method,
@@ -114,22 +100,26 @@ imbs_map_rf <- setRefClass('imbs',
                                        pmap(list(measure,msr_args), ~do.call(.x,.y)) %>%
                                        map(~select(.x,-.estimator)) %>%
                                        do.call(bind_rows,.) %>% 
+                                       mutate(val_method = val_method) %>% 
                                        list()
                                      
                                      map_list[[method]]$step_grid$perf[i] <<- perf_df
                                  
                                    },
                                  'cv' =
+                                   ,
+                                 'validation' =
                                    {
                                      perf_df <-
                                        data_aug %>% 
                                        collect_metrics() %>% 
                                        rename(.estimate=mean) %>% 
                                        select(.metric,.estimate) %>%
+                                       mutate(val_method = val_method) %>% 
                                        list()
                                      
                                      map_list[[method]]$step_grid$perf[i] <<- perf_df
-                                   }
+                                   } 
                                 
                                )
                                  
@@ -208,11 +198,16 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
                fit_resamples(
                  object = wf_set,
                  metrics = metric_set(roc_auc,accuracy,j_index),
-                 vfold_cv(data=arg_data,v= 5,strata  = all_of(target))
+                 vfold_cv(data = arg_data, v = 5, strata = all_of(target))
+               ) %>% 
+               imbs_rf$perf(i = i, method = m, val_method = val_method),
+             'validation' =
+               fit_resamples(
+                 object = wf_set,
+                 metrics = metric_set(roc_auc,accuracy,j_index),
+                 validation_split(data = arg_data, prop = 0.2, strata  = all_of(target))
                ) %>% 
                imbs_rf$perf(i = i, method = m, val_method = val_method)
-               
-             
       )
     }
   }
