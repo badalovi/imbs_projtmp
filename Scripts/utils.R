@@ -69,7 +69,7 @@ imbs_map_rf <- setRefClass('imbs',
                                return(maplist(method)$step_grid)
                              },
                              gridf = function(method){
-                               return(pull(maplist(method)$step_grid,2))
+                               return(pull(maplist(method)$step_grid,1))
                              },
                              grids = function(method){
                                return(pull(maplist(method)$step_grid,2))
