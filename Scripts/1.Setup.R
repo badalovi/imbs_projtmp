@@ -1,6 +1,6 @@
 # Cleaning Environment & Setting Project Directory
 rm(list=ls())
-setwd('C:/Users/GN07HL/OneDrive - ING/Desktop/MyRchive/imbs_proj')
+setwd('C:/Users/GN07HL/OneDrive - ING/Desktop/MyRchive/Projects/Own Projects/imbs_projtmp')
 
 library(tidymodels)       # Modelling Framework
 library(themis)           # Imbalanced Sampling
@@ -16,20 +16,25 @@ dev <- read_csv('Data/input/dev.csv')
 # Argument Setting
 
 # Argument data 
-data <- dev
-# Argument methods take sampling methods as input, multiple methods can be given
-methods <- 'smote' # 'all', smote', 'rose', 'bsmote', 'adasyn','nearmiss','downsample','upsample','tomek','upsample 
-# Argument models take ML model names as input, multiple model can be given
+
+target     <- 'bad_flag' # Variable modelling on
+predictors <- c('.')     # Independent variables, . means all in the data
+
+arg_data       <- dev
+arg_method     <- 'rose' # 'all', smote', 'rose', 'bsmote', 'adasyn','nearmiss','downsample','upsample','tomek','upsample 
+arg_formula    <- as.formula(paste0(target,'~',predictors))
+arg_val_method <- 'none'
+arg_criteria   <- 'gini'
+
+
 models  <- 'LogisticRegression' # Bagging, RandomForest, 'DecisionTree'
 
 
 # Seting Target variable
-target     <- 'bad_flag' # Variable modelling on
-predictors <- c('.')     # Independent variables, . means all in the data
-formula <- as.formula(paste0(target,'~',predictors))
+
 
 # Transforming target variable into factor 
-if(!is.factor(data[target])){
-  data[target] <- factor(unlist(data[target],use.names = F))
+if(!is.factor(arg_data[target])){
+  arg_data[target] <- factor(unlist(arg_data[target],use.names = F))
 }
 
