@@ -15,7 +15,7 @@ dev <- read_csv('Data/input/dev.csv')
 
 # Argument Setting
 
-# Argument data 
+
 
 target     <- 'bad_flag' # Variable modelling on
 predictors <- c('.')     # Independent variables, . means all in the data

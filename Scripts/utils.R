@@ -56,21 +56,27 @@ imbs_map_rf <- setRefClass('imbs',
                              maplist = function(method){
                                return(map_list[[method]])
                              },
+                             
                              fun = function(method){
                                return(maplist(method)$step_fun)
                              },
+                             
                              args = function(method){
                                return(maplist(method)$step_args)
                              },
+                             
                              grid = function(method){
                                return(maplist(method)$step_grid)
                              },
+                             
                              gridf = function(method){
                                return(pull(maplist(method)$step_grid,1))
                              },
+                             
                              grids = function(method){
                                return(pull(maplist(method)$step_grid,2))
                              },
+                             
                              lngth = function(method,seql=T){
                                if(seql){
                                  l <- seq_len(nrow(grid(method)))
@@ -80,10 +86,12 @@ imbs_map_rf <- setRefClass('imbs',
                                }
                                return(l)
                              },
+                             
                              prog = function(i,m){
                                cat('\014')
                                cat(paste0(m,': ',round(i /lngth(m,F) * 100), '% completed\n'))
                              },
+                             
                              perf = function(data_aug,i,method,val_method){
                                
                                switch(val_method,
@@ -106,8 +114,9 @@ imbs_map_rf <- setRefClass('imbs',
                                      map_list[[method]]$step_grid$perf[i] <<- perf_df
                                  
                                    },
-                                 'cv' =
-                                   ,
+                                 
+                                 'cv' =,
+
                                  'validation' =
                                    {
                                      perf_df <-
@@ -139,8 +148,21 @@ imbs_map_rf <- setRefClass('imbs',
 
 imbs_tune_method <- function(data, method, formula, val_method, criteria){
   
-  # method     <- match.arg(method,c('all','smote','bsmote','rose','adasyn',
-  #                                   'nearmiss','upsample','downsample','tomek'))
+  
+
+  methods_vec <- 
+    c('smote','bsmote','rose',
+      'adasyn','nearmiss','upsample',
+      'downsample','tomek'
+      )
+  
+  stopifnot(
+    (all(method %in% methods_vec) & all(!method %in% 'all')) | method %in% 'all'
+  )
+  stopifnot(
+    is.data.frame(data) | is_tibble(data) | is_formula(formula)
+  )
+  
   val_method <- match.arg(val_method, c('none','cv','validation'))
   critera    <- match.arg(criteria, c('gini','accuracy','precision'))
   
@@ -194,6 +216,7 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
                augment(new_data = data) %>%
                mutate(.pred=factor(ifelse(.pred_1>0.5,1,0))) %>% 
                imbs_rf$perf(i = i,method = m,val_method=val_method),
+             
              'cv' = 
                fit_resamples(
                  object = wf_set,
@@ -201,6 +224,7 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
                  vfold_cv(data = arg_data, v = 5, strata = all_of(target))
                ) %>% 
                imbs_rf$perf(i = i, method = m, val_method = val_method),
+             
              'validation' =
                fit_resamples(
                  object = wf_set,
