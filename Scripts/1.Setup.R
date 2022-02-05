@@ -21,10 +21,10 @@ target     <- 'bad_flag' # Variable modelling on
 predictors <- c('.')     # Independent variables, . means all in the data
 
 arg_data       <- dev
-arg_method     <- 'rose' # 'all', smote', 'rose', 'bsmote', 'adasyn','nearmiss','downsample','upsample','tomek','upsample 
+arg_method     <- c('rose','adasyn','bsmote') 
 arg_formula    <- as.formula(paste0(target,'~',predictors))
 arg_val_method <- 'none'
-arg_criteria   <- 'gini'
+arg_criteria   <- 'auc'
 
 
 models  <- 'LogisticRegression' # Bagging, RandomForest, 'DecisionTree'

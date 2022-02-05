@@ -4,7 +4,7 @@ imbs_map <-
   list(
     smote = list(
       step_fun  = 'step_smote',
-      step_args = c('recipe','over_ratio','neighbors','spec'),
+      step_args = c('recipe','over_ratio','neighbors',''),
       step_grid = tibble(
         expand.grid(
           over_ratio = seq(0.1,1,by=0.1),
@@ -15,10 +15,9 @@ imbs_map <-
       )
     ),
     
-    
     rose = list(
       step_fun  = 'step_rose',
-      step_args = c('recipe','over_ratio','minority_smoothness','spec'),
+      step_args = c('recipe','over_ratio','minority_smoothness',''),
       step_grid = tibble(
         expand.grid(
           over_ratio    = seq(0.1,1,by=0.1),
@@ -29,16 +28,65 @@ imbs_map <-
       )
     ),
     
-    
     bsmote = list(
       step_fun  = 'step_bsmote',
-      step_args = c('recipe','over_ratio','neighbors','spec'),
+      step_args = c('recipe','over_ratio','neighbors',''),
       step_grid = tibble(
         expand.grid(
           over_ratio = seq(0.1,1,by=0.1),
           neighbours = 2:4,
           perf       = 0,
           method     = 'bsmote'
+        )
+      )
+    ),
+    
+    adasyn = list(
+      step_fun  = 'step_adasyn',
+      step_args = c('recipe','over_ratio','neighbors',''),
+      step_grid = tibble(
+        expand.grid(
+          over_ratio = seq(0.1,1,by=0.1),
+          neighbours = 3:16,
+          perf       = 0,
+          method     = 'adasyn'
+        )
+      )
+    ),
+    
+    nearmiss = list(
+      step_fun  = 'step_nearmiss',
+      step_args = c('recipe','under_ratio','neighbors',''),
+      step_grid = tibble(
+        expand.grid(
+          under_ratio = seq(0.1,1,by=0.1),
+          neighbours = 3:16,
+          perf       = 0,
+          method     = 'adasyn'
+        )
+      )
+    ),
+    
+    downsample = list(
+      step_fun  = 'step_downsample',
+      step_args = c('recipe','under_ratio',''),
+      step_grid = tibble(
+        expand.grid(
+          under_ratio = seq(0.1,1,by=0.1),
+          perf        = 0,
+          method      = 'downsample'
+        )
+      )
+    ),
+    
+    upsample = list(
+      step_fun  = 'step_upsample',
+      step_args = c('recipe','over_ratio',''),
+      step_grid = tibble(
+        expand.grid(
+          under_ratio = seq(0.1,1,by=0.1),
+          perf        = 0,
+          method      = 'upsample'
         )
       )
     )
@@ -74,7 +122,12 @@ imbs_map_rf <- setRefClass('imbs',
                              },
                              
                              grids = function(method){
-                               return(pull(maplist(method)$step_grid,2))
+                               if(method %in% c('downsample','upsample')){
+                                 return(NULL)
+                               } 
+                               else{
+                                 return(pull(maplist(method)$step_grid,2))
+                               }
                              },
                              
                              lngth = function(method,seql=T){
@@ -147,13 +200,12 @@ imbs_map_rf <- setRefClass('imbs',
 
 
 imbs_tune_method <- function(data, method, formula, val_method, criteria){
-  
-  
+
 
   methods_vec <- 
-    c('smote','bsmote','rose',
-      'adasyn','nearmiss','upsample',
-      'downsample','tomek'
+    c('smote','rose','bsmote',
+      'adasyn','nearmiss','downsample',
+      'upsample'
       )
   
   stopifnot(
@@ -163,8 +215,12 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
     is.data.frame(data) | is_tibble(data) | is_formula(formula)
   )
   
+  if(length(method)==1 & method=='all'){
+    method <- methods_vec
+  }
+  
   val_method <- match.arg(val_method, c('none','cv','validation'))
-  critera    <- match.arg(criteria, c('gini','accuracy','precision'))
+  critera    <- match.arg(criteria, c('auc','accuracy','precision'))
   
   
   imbs_rf <-imbs_map_rf$new(
@@ -172,15 +228,16 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
     methods  = method
   )
   
-  recipe_base <- 
-    recipe(formula, 
-           data = data
-    )
-  
-  logistic_reg_spc <- logistic_reg() %>%
+  recipe_base <- recipe(
+    formula = formula, 
+    data    = data
+  )
+
+  logistic_reg_spc <-
+    logistic_reg() %>%
     set_mode('classification') %>%
     set_engine('glm')
-  
+
   
   for(m in method){
     
@@ -199,7 +256,7 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
         do.call(
           imbs_rf$fun(m),
           set_names(
-            step_list,
+            discard(step_list,is.null),
             imbs_rf$args(m)
           )
         ) 
