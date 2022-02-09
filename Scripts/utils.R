@@ -5,6 +5,7 @@ imbs_map <-
     smote = list(
       step_fun  = 'step_smote',
       step_args = c('recipe','over_ratio','neighbors',''),
+      step_best = list(),
       step_grid = tibble(
         expand.grid(
           over_ratio = seq(0.1,1,by=0.1),
@@ -18,6 +19,7 @@ imbs_map <-
     rose = list(
       step_fun  = 'step_rose',
       step_args = c('recipe','over_ratio','minority_smoothness',''),
+      step_best = list(),
       step_grid = tibble(
         expand.grid(
           over_ratio    = seq(0.1,1,by=0.1),
@@ -31,6 +33,7 @@ imbs_map <-
     bsmote = list(
       step_fun  = 'step_bsmote',
       step_args = c('recipe','over_ratio','neighbors',''),
+      step_best = list(),
       step_grid = tibble(
         expand.grid(
           over_ratio = seq(0.1,1,by=0.1),
@@ -44,6 +47,7 @@ imbs_map <-
     adasyn = list(
       step_fun  = 'step_adasyn',
       step_args = c('recipe','over_ratio','neighbors',''),
+      step_best = list(),
       step_grid = tibble(
         expand.grid(
           over_ratio = seq(0.1,1,by=0.1),
@@ -57,6 +61,7 @@ imbs_map <-
     nearmiss = list(
       step_fun  = 'step_nearmiss',
       step_args = c('recipe','under_ratio','neighbors',''),
+      step_best = list(),
       step_grid = tibble(
         expand.grid(
           under_ratio = seq(0.1,1,by=0.1),
@@ -70,6 +75,7 @@ imbs_map <-
     downsample = list(
       step_fun  = 'step_downsample',
       step_args = c('recipe','under_ratio',''),
+      step_best = list(),
       step_grid = tibble(
         expand.grid(
           under_ratio = seq(0.1,1,by=0.1),
@@ -82,6 +88,7 @@ imbs_map <-
     upsample = list(
       step_fun  = 'step_upsample',
       step_args = c('recipe','over_ratio',''),
+      step_best = list(),
       step_grid = tibble(
         expand.grid(
           under_ratio = seq(0.1,1,by=0.1),
@@ -186,8 +193,23 @@ imbs_map_rf <- setRefClass('imbs',
                                )
                                  
                              },
-                             bestune = function(){
-                               maplist()
+                             bestune = function(method,criteria){
+                               
+                               best_par <-
+                                 grid(method) %>% 
+                                 unnest(perf) %>% 
+                                 filter(.metric==criteria) %>% 
+                                 top_n(n = 1, wt = .estimate) %>%
+                                 select(-c(.metric:method)) %>%
+                                 pivot_longer(cols = everything()) %>% 
+                                 pull(value)
+                                # grid(method) %>% 
+                                # unnest(perf) %>% 
+                                # filter(.metric==criteria) %>% 
+                                # top_n(n = 1, wt = .estimate) %>% 
+                                # as.list()
+                               
+                               map_list[[method]]$step_best <<- best_par
                              }
                              
                              
@@ -215,12 +237,12 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
     is.data.frame(data) | is_tibble(data) | is_formula(formula)
   )
   
-  if(length(method)==1 & method=='all'){
+  if(length(method)==1 && method=='all'){
     method <- methods_vec
   }
   
   val_method <- match.arg(val_method, c('none','cv','validation'))
-  critera    <- match.arg(criteria, c('auc','accuracy','precision'))
+  critera    <- match.arg(criteria, c('roc_auc','accuracy','precision'))
   
   
   imbs_rf <-imbs_map_rf$new(
@@ -256,7 +278,7 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
         do.call(
           imbs_rf$fun(m),
           set_names(
-            discard(step_list,is.null),
+            discard(step_list,~is.null(.x) || is.na(.x)),
             imbs_rf$args(m)
           )
         ) 
@@ -291,11 +313,38 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
                imbs_rf$perf(i = i, method = m, val_method = val_method)
       )
     }
+    
+    imbs_rf$bestune(method = m,criteria = criteria)
   }
   
   assign('imbs_rf',imbs_rf,envir = .GlobalEnv)
 }
 
 
-
-
+imbs_tune_model <- function(data, method, formula, val_method){
+  
+  method_list <- set_names(as.list(method),method)
+  
+  recipe_base <- recipe(
+    formula = arg_formula, 
+    data    = arg_data
+  )
+  
+  recipe_list <-
+    map(method_list,function(m){
+      
+      step_list <- list(
+        recipe_base,
+        imbs_rf$maplist(m)$step_best[1],
+        imbs_rf$maplist(m)$step_best[2],
+        'bad_flag'
+      )
+      
+      do.call(imbs_rf$fun(m),
+              set_names(
+                discard(step_list,~is.null(.x) || is.na(.x)),
+                imbs_rf$args(m)
+              ))
+    })
+  return(recipe_list)
+}
