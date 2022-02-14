@@ -7,10 +7,11 @@ imbs_map <-list(
         step_fun  = 'step_smote',
         step_args = c('recipe','over_ratio','neighbors',''),
         step_best = list(),
+        step_ind  = 1:2,
         step_grid = tibble(
           expand.grid(
             over_ratio = seq(0.1,1,by=0.1),
-            neighbours = 3:16,
+            neighbors = 3:16,
             perf       = 0,
             method     = 'smote'
           )
@@ -21,10 +22,13 @@ imbs_map <-list(
         step_fun  = 'step_rose',
         step_args = c('recipe','over_ratio','minority_smoothness',''),
         step_best = list(),
+        step_ind  = 1:4,
         step_grid = tibble(
           expand.grid(
-            over_ratio    = seq(0.1,1,by=0.1),
-            minority_smth = seq(0.1,1,by=0.1),
+            over_ratio           = seq(0.1,1,by=0.1),
+            minority_prop        = seq(0.1,1,by=0.25),
+            minority_smoothness  = seq(0.1,1,by=0.25),
+            majority_smoothness  = seq(0.1,1,by=0.25),
             perf          = 0,
             method        = 'rose'
           )
@@ -156,17 +160,19 @@ imbs_map_rf <- setRefClass('imbs',
                                return(method_list(method)$step_grid)
                              },
                              
-                             method_gridf = function(method){
-                               return(pull(method_list(method)$step_grid,1))
+                             method_ind = function(method){
+                               return(method_list(method)$step_ind)
                              },
                              
-                             method_grids = function(method){
-                               if(method %in% c('downsample','upsample')){
-                                 return(NULL)
-                               } 
-                               else{
-                                 return(pull(method_list(method)$step_grid,2))
-                               }
+                             method_gridin = function(method,i){
+                               
+                               params <-
+                                 method_grid(method) %>%
+                                 data.frame() %>% 
+                                 .[i,method_ind(method)] %>% 
+                                 as.list()
+                               
+                               return(params)
                              },
                              
                              method_lngth = function(method,seql=T){
@@ -273,7 +279,7 @@ imbs_map_rf <- setRefClass('imbs',
 # Setting function to create full recipe
 
 
-imbs_tune_method <- function(data, method, formula, val_method, criteria){
+imbs_tune_method <- function(data, method, model, formula, val_method, criteria){
 
 
   methods_vec <- 
@@ -299,7 +305,8 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
   
   imbs_rf <-imbs_map_rf$new(
     map_list = imbs_map,
-    methods  = method
+    methods  = method,
+    models   = model
   )
   
   recipe_base <- recipe(
@@ -319,21 +326,17 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
       
       imbs_rf$method_prog(i,m)
       
-      step_list <- list(
-        recipe_base,
-        imbs_rf$method_gridf(m)[i],
-        imbs_rf$method_grids(m)[i],
-        'bad_flag'
+      step_list <- append(
+        list(recipe = recipe_base,'bad_flag'),
+        imbs_rf$method_gridin(method = m,i = i),
+        after =1
       )
       
       recipe_final <- 
         do.call(
           imbs_rf$method_fun(m),
-          set_names(
-            discard(step_list,~is.null(.x) || is.na(.x)),
-            imbs_rf$method_args(m)
-          )
-        ) 
+          step_list
+        )
       
       wf_set <-
         workflow() %>%
@@ -372,33 +375,3 @@ imbs_tune_method <- function(data, method, formula, val_method, criteria){
   assign('imbs_rf',imbs_rf,envir = .GlobalEnv)
 }
 
-
-imbs_tune_model <- function(data, method, formula, val_method){
-  
-  method_list <- set_names(as.list(method),method)
-  
-  recipe_base <- recipe(
-    formula = arg_formula, 
-    data    = arg_data
-  )
-  
-  recipe_list <-
-    map(method_list,function(m){
-      
-      step_list <- list(
-        recipe_base,
-        imbs_rf$maplist(m)$step_best[1],
-        imbs_rf$maplist(m)$step_best[2],
-        'bad_flag'
-      )
-      
-      do.call(imbs_rf$fun(m),
-              set_names(
-                discard(step_list,~is.null(.x) || is.na(.x)),
-                imbs_rf$args(m)
-              ))
-    })
-  
-  return(recipe_list)
-  
-}

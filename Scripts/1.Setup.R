@@ -21,16 +21,11 @@ target     <- 'bad_flag' # Variable modelling on
 predictors <- c('.')     # Independent variables, . means all in the data
 
 arg_data       <- dev
-arg_method     <- c('rose','adasyn','bsmote') 
+arg_method     <- c('rose','smote')
+arg_model      <- c('LogisticReg','ElasticnetReg')
 arg_formula    <- as.formula(paste0(target,'~',predictors))
 arg_val_method <- 'none'
-arg_criteria   <- 'auc'
-
-
-models  <- 'LogisticRegression' # Bagging, RandomForest, 'DecisionTree'
-
-
-# Seting Target variable
+arg_criteria   <- 'roc_auc'
 
 
 # Transforming target variable into factor 
