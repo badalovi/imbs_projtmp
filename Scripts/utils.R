@@ -118,31 +118,50 @@ imbs_map <-list(
   model =
     list(
       LogisticReg = list(
-        spec = logistic_reg,
+        spec  = logistic_reg,
         args  = list(mode = 'classification',
                      engine = 'glm'
         )
       ),
       
       RidgeReg = list(
-        spec = logistic_reg,
+        spec  = logistic_reg,
         args  = list(mode    = 'classification',
-                     engine  = 'glm',
+                     engine  = 'glmnet',
                      mixture = 0,
                      penalty = tune()
         )
       ),
       
-      ElasticnetReg = list(
-        spec = logistic_reg,
+      LassoReg = list(
+        spec  = logistic_reg,
         args  = list(mode    = 'classification',
-                     engine  = 'glm',
+                     engine  = 'glmnet',
+                     mixture = 1,
+                     penalty = tune()
+        )
+      ),
+      
+      ElasticnetReg = list(
+        spec  = logistic_reg,
+        args  = list(mode    = 'classification',
+                     engine  = 'glmnet',
                      mixture = tune(),
                      penalty = tune()
         )
+      ),
+      
+      DecisionTree = list(
+        spec  = decision_tree,
+        args  = list(mode            = 'classification',
+                     engine          = 'rpart',
+                     cost_complexity = tune(),
+                     tree_depth      = tune(),
+                     min_n           = tune()
+        )
       )
-    )
   )
+)
 
 
 
@@ -192,6 +211,14 @@ imbs_map_rf <- setRefClass('imbs',
                                  l <- nrow(method_grid(method))
                                }
                                return(l)
+                             },
+                             
+                             method_rbase = function(formula,data){
+                               
+                               recipe(
+                                 formula = formula, 
+                                 data    = data
+                               )
                              },
                              
                              method_prog = function(i,m){
@@ -294,6 +321,21 @@ imbs_map_rf <- setRefClass('imbs',
                                  write.xlsx(file = paste0(path_int,'/method_grid.xlsx'))
                              },
                              
+                             method_spec = function(method){
+                               
+                               recipe_list <- 
+                                 append(
+                                   list(recipe = method_rbase(arg_formula,arg_data),
+                                        'bad_flag'),
+                                 imbs_rf$method_getbest(method),
+                                 after = 1
+                               )
+                               
+                               do.call(imbs_rf$method_fun(method),
+                                       recipe_list
+                                       )
+                             },
+                             
                              
                              # Model Tuning
                              model_list = function(model){
@@ -368,15 +410,10 @@ imbs_tune_method <- function(data,
     models   = model
   )
   
-  recipe_base <- recipe(
-    formula = formula, 
-    data    = data
-  )
+  recipe_base <-
+    imbs_rf$method_rbase(formula,data)
 
   logistic_reg_spc <-
-    # logistic_reg() %>%
-    # set_mode('classification') %>%
-    # set_engine('glm')
     imbs_rf$model_spec(model_tune)
 
   
@@ -439,3 +476,58 @@ imbs_tune_method <- function(data,
 }
 
 
+imbs_tune_model <- function(data,method,model,formula,model_par){
+  
+  prep_ind <- model %in% names(model_par)
+  model_list <-
+    map2(model[prep_ind],model_par,function(m,a){
+      imbs_rf$model_set_args(m,a)
+      imbs_rf$model_spec(m)
+      }
+    ) %>%
+    append(
+      map(model[!prep_ind],~imbs_rf$model_spec(.x))
+    ) %>% 
+    set_names(c(model[prep_ind],model[!prep_ind]))
+  
+  
+  method_list <-
+    map(method,~imbs_rf$method_spec(.x)) %>% 
+    set_names(method)
+  
+  
+  wf_set <- 
+    workflow_set(
+      preproc = method_list,
+      models  = model_list,
+      cross   = TRUE
+    )
+  
+  
+  train_resamples <-
+    vfold_cv(
+      data   = data,
+      strata = all_of(target),
+      v      = 3
+    )
+  
+  
+  class_metric <-
+    metric_set(
+      accuracy, j_index,
+      precision,roc_auc
+    )
+  
+  
+  wf_sample_exp <-
+    workflow_map(
+      object     = wf_set,
+      resamples  = train_resamples,
+      verbose    = TRUE,
+      metrics    = class_metric,
+      seed       = 123
+    )
+  
+  return(wf_sample_exp)
+  
+}
