@@ -119,6 +119,7 @@ imbs_map <-list(
     list(
       LogisticReg = list(
         spec  = logistic_reg,
+        argsd = c('mode','engine'), 
         args  = list(mode = 'classification',
                      engine = 'glm'
         )
@@ -126,6 +127,7 @@ imbs_map <-list(
       
       RidgeReg = list(
         spec  = logistic_reg,
+        argsd = c('mode','engine','mixture'),
         args  = list(mode    = 'classification',
                      engine  = 'glmnet',
                      mixture = 0,
@@ -135,6 +137,7 @@ imbs_map <-list(
       
       LassoReg = list(
         spec  = logistic_reg,
+        argsd = c('mode','engine','mixture'),
         args  = list(mode    = 'classification',
                      engine  = 'glmnet',
                      mixture = 1,
@@ -144,6 +147,7 @@ imbs_map <-list(
       
       ElasticnetReg = list(
         spec  = logistic_reg,
+        argsd = c('mode','engine'),
         args  = list(mode    = 'classification',
                      engine  = 'glmnet',
                      mixture = tune(),
@@ -153,6 +157,7 @@ imbs_map <-list(
       
       DecisionTree = list(
         spec  = decision_tree,
+        argsd = c('mode','engine'),
         args  = list(mode            = 'classification',
                      engine          = 'rpart',
                      cost_complexity = tune(),
@@ -160,7 +165,7 @@ imbs_map <-list(
                      min_n           = tune()
         )
       )
-  )
+   )
 )
 
 
@@ -169,7 +174,7 @@ imbs_map <-list(
 
 imbs_map_rf <- setRefClass('imbs',
                            fields = list(
-                             map_list ='list',
+                             map_list = 'list',
                              methods  = 'character',
                              models   = 'character'
                            ),
@@ -352,6 +357,7 @@ imbs_map_rf <- setRefClass('imbs',
                              
                              model_set_args = function(model,args){
                                
+                               
                                if(!is.null(args)){
                                  args_vec <- which(
                                    names(model_list(model)$args) %in% names(args)
@@ -476,14 +482,21 @@ imbs_tune_method <- function(data,
 }
 
 
-imbs_tune_model <- function(data,method,model,formula,model_par){
+
+imbs_tune_model <- function(data,
+                            model,
+                            metrics,
+                            formula,
+                            model_par,
+                            val_model,
+                            tune_ln){
   
   prep_ind <- model %in% names(model_par)
   model_list <-
     map2(model[prep_ind],model_par,function(m,a){
       imbs_rf$model_set_args(m,a)
       imbs_rf$model_spec(m)
-      }
+    }
     ) %>%
     append(
       map(model[!prep_ind],~imbs_rf$model_spec(.x))
@@ -491,9 +504,10 @@ imbs_tune_model <- function(data,method,model,formula,model_par){
     set_names(c(model[prep_ind],model[!prep_ind]))
   
   
+  
   method_list <-
-    map(method,~imbs_rf$method_spec(.x)) %>% 
-    set_names(method)
+    map(imbs_rf$methods,~imbs_rf$method_spec(.x)) %>% 
+    set_names(imbs_rf$methods)
   
   
   wf_set <- 
@@ -503,20 +517,24 @@ imbs_tune_model <- function(data,method,model,formula,model_par){
       cross   = TRUE
     )
   
-  
   train_resamples <-
-    vfold_cv(
-      data   = data,
-      strata = all_of(target),
-      v      = 3
+    switch (val_model,
+            'cv' = 
+              vfold_cv(
+                data   = data,
+                strata = all_of(target),
+                v      = 5
+              ),
+            'validation' =
+              validation_split(
+                data   = data,
+                strata = all_of(target),
+                prop   = 0.2
+              )
     )
   
   
-  class_metric <-
-    metric_set(
-      accuracy, j_index,
-      precision,roc_auc
-    )
+  class_metric <- metrics
   
   
   wf_sample_exp <-
@@ -525,7 +543,8 @@ imbs_tune_model <- function(data,method,model,formula,model_par){
       resamples  = train_resamples,
       verbose    = TRUE,
       metrics    = class_metric,
-      seed       = 123
+      seed       = 123,
+      grid       = tune_ln
     )
   
   return(wf_sample_exp)

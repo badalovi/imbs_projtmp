@@ -12,10 +12,14 @@
 # - Export intermediate datas, best tuned data for each method+
 # - Make model optional to user within method tuning step instead of forcing only logistic regression  +
 # - Make map2 eligible for unequal model and arg lists since each model might not have user defined argument +
+# - Add validation method argument into model tuning step +
 
 
-
-# - Add test evaluation to model tuning step
+# - Add model parameter grid range
+# - Avoid user to use untuned methods in model tuning step, '...methods are not tuned,will be omitted'
+# - Add tune_vector(mixture,tree_depth) to adjust tuning length in model step
+# - Add metrics argument into model tuning step
+# - Add test dataset evaluation/performance to model tuning step
 # - Add get and set methods for user
 # - Find a way to control randomness in method tuning step
 # - When method tuning produce same performance over the grid, add if+warning
