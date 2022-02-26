@@ -24,23 +24,23 @@ arg_data       <- dev
 arg_formula    <- as.formula(paste0(target,'~',predictors))
 arg_recipe     <- recipe(arg_formula,arg_data)
 
-arg_method     <- c('smote','downsample')
-arg_model_tune <- 'LogisticReg' # Model to tune methods
+arg_method     <- c('downsample')
+arg_model_tune <- 'RidgeReg' # Model to tune methods
 arg_val_method <- 'none'
 arg_criteria   <- 'roc_auc'
-arg_model      <- c('LogisticReg','ElasticnetReg')
+arg_model      <- c('LogisticReg','ElasticnetReg','RidgeReg')
 arg_val_model  <- 'cv'
 arg_metrics    <- metric_set(roc_auc,accuracy,j_index)
 arg_tune_ln    <- 20 
 arg_model_par  <- list(ElasticnetReg=list(mixture=0.5),
-                       DecisionTree=list(min_n=4)) 
-
+                       RidgeReg=list(mixture=0.3,alpha=0.3)) 
 
 
 # Transforming target variable into factor 
 if(!is.factor(arg_data[target])){
   arg_data[target] <- factor(unlist(arg_data[target],use.names = F))
 }
+
 
 
 # Establishing Directory

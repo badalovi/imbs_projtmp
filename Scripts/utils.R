@@ -122,7 +122,8 @@ imbs_map <-list(
         argsd = c('mode','engine'), 
         args  = list(mode = 'classification',
                      engine = 'glm'
-        )
+        ),
+        grid  = NULL
       ),
       
       RidgeReg = list(
@@ -132,17 +133,24 @@ imbs_map <-list(
                      engine  = 'glmnet',
                      mixture = 0,
                      penalty = tune()
-        )
+        ),
+        grid  = grid_regular(penalty(),
+                             levels = 20
+                             )
       ),
       
       LassoReg = list(
         spec  = logistic_reg,
+        grid  = grid_regular(penalty(),levels = 20),
         argsd = c('mode','engine','mixture'),
         args  = list(mode    = 'classification',
                      engine  = 'glmnet',
                      mixture = 1,
                      penalty = tune()
-        )
+        ),
+        grid  = grid_regular(penalty(),
+                             levels = 20
+                             )
       ),
       
       ElasticnetReg = list(
@@ -152,7 +160,11 @@ imbs_map <-list(
                      engine  = 'glmnet',
                      mixture = tune(),
                      penalty = tune()
-        )
+        ),
+        grid  = grid_regular(penalty(),
+                             mixture(),
+                             levels = 20
+                             )
       ),
       
       DecisionTree = list(
@@ -163,7 +175,12 @@ imbs_map <-list(
                      cost_complexity = tune(),
                      tree_depth      = tune(),
                      min_n           = tune()
-        )
+        ),
+        grid  = grid_regular(cost_complexity(),
+                             tree_depth(),
+                             min_n(),
+                             levels = 20
+                             )
       )
    )
 )
@@ -351,12 +368,22 @@ imbs_map_rf <- setRefClass('imbs',
                                return(model_list(model)$spec)
                              },
                              
+                             model_grid = function(model){
+                               return(model_list(model)$grid)
+                             },
+                             
                              model_args = function(model){
                                return(model_list(model)$args)
                              },
                              
                              model_set_args = function(model,args){
                                
+                               .ind <- names(args) %in% imbs_rf$model_list(model)$argsd
+                               if(any(.ind) & !is.null(args)){
+                                 args <- args[!.ind]
+                                 message('Model default arguments can not be changed!',
+                                         '\nOnly ',names(args),' will be used for ',model)
+                               }
                                
                                if(!is.null(args)){
                                  args_vec <- which(
@@ -387,13 +414,14 @@ imbs_tune_method <- function(data,
                              formula,
                              val_method,
                              criteria){
-
-
+  
+  # Argument matching
+  
   methods_vec <- 
     c('smote','rose','bsmote',
       'adasyn','nearmiss','downsample',
       'upsample'
-      )
+    )
   
   stopifnot(
     (all(method %in% methods_vec) & all(!method %in% 'all')) | method %in% 'all'
@@ -410,19 +438,56 @@ imbs_tune_method <- function(data,
   critera    <- match.arg(criteria, c('roc_auc','accuracy','precision'))
   
   
+  
+  # Creating imbs class object
   imbs_rf <- imbs_map_rf$new(
     map_list = imbs_map,
     methods  = method,
     models   = model
   )
   
+  
+  
+  # Selecting best model to tune methods
   recipe_base <-
     imbs_rf$method_rbase(formula,data)
-
-  logistic_reg_spc <-
-    imbs_rf$model_spec(model_tune)
-
   
+  spec_base <- 
+    imbs_rf$model_spec(model_tune)
+  
+  if(model_tune != 'LogisticReg'){
+    
+    grid_base <-
+      imbs_rf$model_grid(model_tune) 
+    
+    rsmpl_base <-
+      vfold_cv(data = arg_data,v = 5,strata = all_of(target))
+    
+    wrkflw_base <-
+      workflow(recipe_base,spec_base) 
+    
+    tune_base <-
+      tune_grid(
+        object    = wrkflw_base,
+        resamples = rsmpl_base,
+        grid      = grid_base
+      )
+    
+    spec_final <-
+      finalize_workflow(
+        wrkflw_base,
+        tune_base %>% 
+          select_best(arg_criteria)
+      ) %>%
+      extract_spec_parsnip()
+  }
+  else{
+    spec_final <- spec_base
+  }
+  
+  
+  
+  # Method Tuning
   for(m in method){
     
     for(i in imbs_rf$method_lngth(m)){
@@ -445,9 +510,9 @@ imbs_tune_method <- function(data,
       wf_set <-
         workflow() %>%
         add_recipe(recipe_final) %>%
-        add_model(logistic_reg_spc)
+        add_model(spec_final)
       
-
+      
       switch(val_method,
              'none' = 
                wf_set %>%
@@ -492,6 +557,8 @@ imbs_tune_model <- function(data,
                             tune_ln){
   
   prep_ind <- model %in% names(model_par)
+  model_par <- model_par[model[prep_ind]]
+  
   model_list <-
     map2(model[prep_ind],model_par,function(m,a){
       imbs_rf$model_set_args(m,a)
@@ -547,6 +614,6 @@ imbs_tune_model <- function(data,
       grid       = tune_ln
     )
   
-  return(wf_sample_exp)
+  assign('wf_full',wf_sample_exp,envir = .GlobalEnv)
   
 }
