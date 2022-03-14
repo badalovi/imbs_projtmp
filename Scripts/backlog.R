@@ -13,20 +13,24 @@
 # - Make model optional to user within method tuning step instead of forcing only logistic regression  +
 # - Make map2 eligible for unequal model and arg lists since each model might not have user defined argument +
 # - Add validation method argument into model tuning step +
+# - Add model parameter grid range +
+# - Add metrics argument into model tuning step +
+# - Make model_args method's default argument inaccessible to user such as engine, mixture(in Ridge or Lasso) +
+# - Add tune_vector(mixture,tree_depth) to adjust tuning length in model step+
+# - Add nosample+tomek +
 
 
-# - Add model parameter grid range
-# - Avoid user to use untuned methods in model tuning step, '...methods are not tuned,will be omitted'
-# - Add tune_vector(mixture,tree_depth) to adjust tuning length in model step
-# - Add metrics argument into model tuning step
+# - Method setbest should take more than one argument 
+# - Align model setbest with method's one
+# - Add model tuning intermediate data output function
+# - Adjust output directory to make it in Data
 # - Add test dataset evaluation/performance to model tuning step
-# - Add get and set methods for user
-# - Find a way to control randomness in method tuning step
 # - When method tuning produce same performance over the grid, add if+warning
-# - If best is NULL algorithm needs to skip this method
-# - Make model_args method's default argument inaccessible to user such as engine, mixture(in Ridge or Lasso)
-# - Think of parameter complexity in terms of method tuning
 
+
+
+# - Find a way to control randomness in method tuning step
+# - Think of parameter complexity in terms of method tuning
 
 # - NOTE: When setting seed param within step_down/upsample it produces same performance
 #   since proportion increase only adds new samples to previous(lower prop) one so data gets

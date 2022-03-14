@@ -112,7 +112,16 @@ imbs_map <-list(
             method      = 'upsample'
           )
         )
+      ),
+      
+      tomek = list(
+        fun  = 'step_tomek',
+        args = NULL,
+        best = list(),
+        data = tibble(),
+        grid = tibble()
       )
+        
     ),
   
   model =
@@ -329,7 +338,7 @@ imbs_map_rf <- setRefClass('imbs',
                                map_list$method[[method]]$best <<- list(...)
                              },
                              
-                             method_bestout = function(){
+                             method_bestout = function(methods){
                                cat('\014')
                                cat('Method tuning done',
                                    '\nIntermediate datasets for methods are exporting...')
@@ -345,17 +354,22 @@ imbs_map_rf <- setRefClass('imbs',
                              
                              method_spec = function(method){
                                
-                               recipe_list <- 
-                                 append(
-                                   list(recipe = method_rbase(arg_formula,arg_data),
-                                        'bad_flag'),
-                                 imbs_rf$method_getbest(method),
-                                 after = 1
-                               )
-                               
-                               do.call(imbs_rf$method_fun(method),
-                                       recipe_list
-                                       )
+                               if(method=='nosample'){
+                                 imbs_rf$method_rbase(arg_formula,arg_data)
+                               }
+                               else{
+                                 recipe_list <- 
+                                   append(
+                                     list(recipe = method_rbase(arg_formula,arg_data),
+                                          'bad_flag'),
+                                     imbs_rf$method_getbest(method),
+                                     after = 1
+                                     )
+                                 
+                                 do.call(imbs_rf$method_fun(method),
+                                         recipe_list
+                                         )
+                               }
                              },
                              
                              
@@ -376,8 +390,9 @@ imbs_map_rf <- setRefClass('imbs',
                                return(model_list(model)$args)
                              },
                              
-                             model_set_args = function(model,args){
+                             model_setbest = function(model,...){
                                
+                               args <- list(...)
                                .ind <- names(args) %in% imbs_rf$model_list(model)$argsd
                                if(any(.ind) & !is.null(args)){
                                  args <- args[!.ind]
@@ -391,6 +406,25 @@ imbs_map_rf <- setRefClass('imbs',
                                  ) 
                                  map_list$model[[model]]$args[args_vec] <<- args 
                                }
+                             },
+                             
+                             model_bestout = function(wf_sample){
+                               
+                               wf_sample %>%
+                                 select(wflow_id,result) %>%
+                                 unnest(result) %>%
+                                 select(wflow_id,.metrics) %>%
+                                 unnest(.metrics) %>% 
+                                 group_by(wflow_id) %>%
+                                 group_split() %>%
+                                 set_names(wf_sample %>% pull(wflow_id) %>% sort()) %>% 
+                                 map(ungroup) %>% 
+                                 map(~ .x %>% select_if(~ all(!is.na(.x)))) %>% 
+                                 map(~ .x %>% select(-c( .estimator,.estimate))) %>% 
+                                 map(~ .x %>% inner_join(wf_sample %>% collect_metrics(),
+                                                         by=c('wflow_id','.config','.metric'))) %>% 
+                                 map(~ .x %>% distinct()) %>% 
+                                 write.xlsx(file = paste0(path_int,'/model_grid.xlsx'))
                              },
                              
                              model_spec = function(model){
@@ -415,17 +449,36 @@ imbs_tune_method <- function(data,
                              val_method,
                              criteria){
   
+  # Creating imbs class object
+  imbs_rf <- imbs_map_rf$new(
+    map_list = imbs_map,
+    methods  = method,
+    models   = model
+  )
+  
+  
+  
   # Argument matching
   
-  methods_vec <- 
-    c('smote','rose','bsmote',
-      'adasyn','nearmiss','downsample',
-      'upsample'
-    )
+  methods_vec <-
+   c('smote','rose','bsmote',
+     'adasyn','nearmiss','downsample',
+     'upsample'
+   )
+  
+  method <- method[method %in% methods_vec]
+  
+  if(!length(method)){
+    assign('imbs_rf',imbs_rf,envir = .GlobalEnv)
+    message('Tuning has not been done since all selected methods do not require tuning.
+            Continue with modelling step.')
+    return(invisible(NULL))
+  }
   
   stopifnot(
     (all(method %in% methods_vec) & all(!method %in% 'all')) | method %in% 'all'
   )
+  
   stopifnot(
     is.data.frame(data) | is_tibble(data) | is_formula(formula)
   )
@@ -436,15 +489,6 @@ imbs_tune_method <- function(data,
   
   val_method <- match.arg(val_method, c('none','cv','validation'))
   critera    <- match.arg(criteria, c('roc_auc','accuracy','precision'))
-  
-  
-  
-  # Creating imbs class object
-  imbs_rf <- imbs_map_rf$new(
-    map_list = imbs_map,
-    methods  = method,
-    models   = model
-  )
   
   
   
@@ -542,7 +586,7 @@ imbs_tune_method <- function(data,
     imbs_rf$method_bestune(method = m,recipe_base = recipe_base,criteria = criteria)
   }
   
-  imbs_rf$method_bestout()
+  imbs_rf$method_bestout(method)
   assign('imbs_rf',imbs_rf,envir = .GlobalEnv)
 }
 
@@ -614,6 +658,7 @@ imbs_tune_model <- function(data,
       grid       = tune_ln
     )
   
+  imbs_rf$model_bestout(wf_sample_exp)
   assign('wf_full',wf_sample_exp,envir = .GlobalEnv)
   
 }
