@@ -456,7 +456,7 @@ imbs_tune_method <- function(data,
     models   = model
   )
   
-  
+
   
   # Argument matching
   
