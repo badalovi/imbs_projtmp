@@ -660,5 +660,5 @@ imbs_tune_model <- function(data,
   
   imbs_rf$model_bestout(wf_sample_exp)
   assign('wf_full',wf_sample_exp,envir = .GlobalEnv)
-  
+
 }

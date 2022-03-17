@@ -18,11 +18,11 @@ train <- read_csv('Data/input/dev.csv')
 target     <- 'bad_flag' # Variable modelling on
 predictors <- c('.')     # Independent variables, . means all in the data
 
-arg_method     <- c('downsample','nosample')
+arg_method     <- c('downsample','nosample','adasyn','smote')
 arg_model_tune <- 'RidgeReg' # Model to tune methods
 arg_val_method <- 'validation'
 arg_criteria   <- 'roc_auc'
-arg_model      <- c('RidgeReg','ElasticnetReg','DecisionTree')
+arg_model      <- c('RidgeReg','ElasticnetReg')
 arg_val_model  <- 'cv'
 arg_metrics    <- metric_set(roc_auc,accuracy,j_index,precision)
 arg_tune_ln    <- 10
